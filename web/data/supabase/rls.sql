@@ -4,7 +4,7 @@
 -- NOTE:
 -- These policies assume JWT custom claims:
 --   app_user_id (numericId as string)
---   app_role    (e.g. "admin" or "contributor")
+--   app_role    (e.g. "admin", "maintainer", or "contributor")
 -- If those claims are absent, authenticated write policies will deny access.
 
 begin;
@@ -12,6 +12,7 @@ begin;
 alter table public.users enable row level security;
 alter table public.projects enable row level security;
 alter table public.ratings enable row level security;
+alter table public.maintainer_categories enable row level security;
 alter table public.auth_challenges enable row level security;
 alter table public.counters enable row level security;
 alter table public.financial_snapshots enable row level security;
@@ -101,7 +102,7 @@ create policy projects_owner_update
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   )
   with check (
@@ -110,7 +111,7 @@ create policy projects_owner_update
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   );
 
@@ -124,7 +125,7 @@ create policy projects_owner_delete
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   );
 
@@ -161,7 +162,7 @@ create policy ratings_owner_update
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   )
   with check (
@@ -170,12 +171,41 @@ create policy ratings_owner_update
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   );
 
-create policy ratings_owner_delete
-  on public.ratings
+-- MAINTAINER CATEGORIES
+drop policy if exists maintainer_categories_self_read on public.maintainer_categories;
+drop policy if exists maintainer_categories_admin_manage on public.maintainer_categories;
+
+create policy maintainer_categories_self_read
+  on public.maintainer_categories
+  for select
+  to authenticated
+  using (
+    (
+      auth.jwt() ->> 'app_user_id'
+    ) is not null
+    and "userId" = (auth.jwt() ->> 'app_user_id')::bigint
+  );
+
+create policy maintainer_categories_admin_manage
+  on public.maintainer_categories
+  for all
+  to authenticated
+  using (
+    (
+      auth.jwt() ->> 'app_role'
+    ) = 'admin'
+  )
+  with check (
+    (
+      auth.jwt() ->> 'app_role'
+    ) = 'admin'
+  );
+
+create policy ratings_owner_delete on public.ratings
   for delete
   to authenticated
   using (
@@ -184,7 +214,7 @@ create policy ratings_owner_delete
     ) is not null
     and (
       user_id = (auth.jwt() ->> 'app_user_id')::bigint
-      or coalesce(auth.jwt() ->> 'app_role', '') = 'admin'
+      or coalesce(auth.jwt() ->> 'app_role', '') in ('admin', 'maintainer')
     )
   );
 
